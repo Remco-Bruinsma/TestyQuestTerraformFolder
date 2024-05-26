@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  Exam-Website:
+    image: darkghostshade/testy-quest-front-end:latest
+    container_name: User-ExamWebsite
+    restart: always
+    pull_policy: always
+    environment: 
+      - WATCHPACK_POLLING="true"
+      - APICONNECTION=https://localhost:44303
+    ports:
+      - '3003:3000'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3003"]
+      interval: 1m30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  testmanagerapi:
+    image: darkghostshade/test-manager-api:latest
+    container_name: Test-Manager-Api
+    restart: always
+    pull_policy: always
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment: 
+      - WATCHPACK_POLLING="true"
+      - ASPNETCORE_HTTPS_PORT=443
+    ports:
+      - '44303:443'
+      - '44302:80'
+      - '80' # Expose port 80 for ASP.NET Core
+      - '443' # Expose port 443 for HTTPS
+    

@@ -1,0 +1,366 @@
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: testy-quest
+---
+# Kafka UI Deployment and Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-ui-deployment
+  namespace: testy-quest
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-ui
+  template:
+    metadata:
+      labels:
+        app: kafka-ui
+    spec:
+      containers:
+        - name: kafka-ui
+          image: provectuslabs/kafka-ui:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DYNAMIC_CONFIG_ENABLED
+              value: "true"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-ui-service
+  namespace: testy-quest
+spec:
+  selector:
+    app: kafka-ui
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+---
+# Kafka StatefulSet, PersistentVolumeClaim, and Service
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kafka-data-claim
+  namespace: testy-quest
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  namespace: testy-quest
+spec:
+  replicas: 3
+  serviceName: kafka-svc
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      containers:
+        - name: kafka-container
+          image: doughgle/kafka-kraft
+          ports:
+            - containerPort: 9092
+          env:
+            - name: REPLICAS
+              value: "3"
+            - name: SERVICE
+              value: kafka-svc
+            - name: NAMESPACE
+              value: testy-quest
+            - name: SHARE_DIR
+              value: /mnt/kafka
+            - name: CLUSTER_ID
+              value: oh-sxaDRTcyAr6pFRbXyzA
+            - name: DEFAULT_REPLICATION_FACTOR
+              value: "3"
+          volumeMounts:
+            - name: kafka-data
+              mountPath: /mnt/kafka
+  volumeClaimTemplates:
+    - metadata:
+        name: kafka-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-svc
+  namespace: testy-quest
+spec:
+  clusterIP: None
+  ports:
+    - port: 9092
+      targetPort: 9092
+      protocol: TCP
+  selector:
+    app: kafka
+---
+# MongoDB Deployment and Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongodb
+  namespace: testy-quest
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      containers:
+        - name: mongodb
+          image: mongo:latest
+          ports:
+            - containerPort: 27017
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb
+  namespace: testy-quest
+spec:
+  ports:
+    - port: 27017
+      targetPort: 27017
+      protocol: TCP
+  selector:
+    app: mongodb
+---
+# Exam Website Deployment and Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: exam-website-deployment
+  namespace: testy-quest
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: exam-website
+  template:
+    metadata:
+      labels:
+        app: exam-website
+    spec:
+      containers:
+        - name: exam-website
+          image: darkghostshade/testy-quest-front-end:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: WATCHPACK_POLLING
+              value: "true"
+            - name: APICONNECTION
+              value: "https://test-managerapi-service"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: exam-website-service
+  namespace: testy-quest
+spec:
+  selector:
+    app: exam-website
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 3000
+---
+# Answer Manager API Deployment, Service, and HPA
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: answer-managerapi-deployment
+  namespace: testy-quest
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: answer-managerapi
+  template:
+    metadata:
+      labels:
+        app: answer-managerapi
+    spec:
+      containers:
+        - name: answer-managerapi-container
+          image: darkghostshade/answer-manager-api:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 100m
+          env:
+            - name: WATCHPACK_POLLING
+              value: "true"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: answer-managerapi-service
+  namespace: testy-quest
+spec:
+  selector:
+    app: answer-managerapi
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 8080
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: answer-managerapi-hpa
+  namespace: testy-quest
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: answer-managerapi-deployment
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 50
+---
+# Question Manager API Deployment, Service, and HPA
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: question-managerapi-deployment
+  namespace: testy-quest
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: question-managerapi
+  template:
+    metadata:
+      labels:
+        app: question-managerapi
+    spec:
+      containers:
+        - name: question-managerapi-container
+          image: darkghostshade/question-manager-api:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 100m
+          env:
+            - name: WATCHPACK_POLLING
+              value: "true"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: question-managerapi-service
+  namespace: testy-quest
+spec:
+  selector:
+    app: question-managerapi
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 8080
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: question-managerapi-hpa
+  namespace: testy-quest
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: question-managerapi-deployment
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 50
+
+# Ingress Resource
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: testy-quest-ingress
+  namespace: testy-quest
+spec:
+  rules:
+    - host: api.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: answer-managerapi-service
+                port:
+                  number: 80
+    - host: api.question.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: question-managerapi-service
+                port:
+                  number: 80
+    - host: website.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: exam-website-service
+                port:
+                  number: 80
+    - host: kafka-ui.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: kafka-ui-service
+                port:
+                  number: 80

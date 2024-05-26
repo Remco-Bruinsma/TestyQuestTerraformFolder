@@ -1,0 +1,25 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki-service:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: kafka_topics
+    kafka:
+      brokers:
+        - "kafka-svc.testy-quest.svc.cluster.local:9092"
+      topics:
+        - "answer-topic"
+        - "consuming-error-topic"
+        - "json-error-topic"
+        - "processing-error-topic"
+        - "validated-answer-topic"
+      group_id: "promtail"
+      labels:
+        job: "kafka_topics"
+      use_incoming_timestamp: false

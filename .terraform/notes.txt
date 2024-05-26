@@ -1,0 +1,137 @@
+# Create ConfigMap for MongoDB configuration
+# resource "kubernetes_config_map" "mongodb-config" {
+#   metadata {
+#     name      = "mongodb-config"
+#     namespace = "testy-quest"
+#   }
+#   data = {
+#     "mongod.conf" = local.mongod_conf_content
+#   }
+# }
+
+
+# Update MongoDB deployment to use the keyfile from the Secret and mount mongodb.conf
+resource "kubernetes_manifest" "mongodb" {
+  manifest = {
+    apiVersion = "apps/v1"
+    kind       = "Deployment"
+    metadata   = {
+      name      = "mongodb"
+      namespace = "testy-quest"
+    }
+    spec       = {
+      replicas = 1
+      selector = {
+        matchLabels = {
+          app = "mongodb"
+        }
+      }
+      template = {
+        metadata = {
+          labels = {
+            app = "mongodb"
+          }
+        }
+        spec     = {
+          containers = [
+            {
+              name  = "mongodb"
+              image = "mongo:latest"
+              ports = [
+                {
+                  containerPort = 27017
+                }
+              ]
+              env = [
+                {
+                  name  = "MONGO_INITDB_ROOT_USERNAME"
+                  value = "root"
+                },
+                {
+                  #for testing 
+                  name  = "MONGO_INITDB_ROOT_PASSWORD"
+                  value = "password123"
+                }
+              ]
+              # volumeMounts=[ 
+              #   {
+              #     name       = "keyfile-volume"
+              #     mount_path = "/data/keyfile.key"
+              #     sub_path   = "keyfile"
+              #     read_only  = true
+              #   },
+              #   {
+              #     name       = "mongodb-config-volume"
+              #     mount_path = "/data/mongodb.conf"
+              #     sub_path   = "mongodb.conf"
+              #     read_only  = true
+              #   }
+              # ]
+            }
+          ]
+          # volumes=[
+          #   {
+          #     name = "keyfile-volume"
+          #     secret = {
+          #       secret_name = "mongodb-keyfile"
+          #     }
+          #   },
+          #   {
+          #     name = "mongodb-config-volume"
+          #     config_map = {
+          #       name = "mongodb-config"
+          #     }
+          #   }
+          # ] 
+        }
+      }
+    }
+  }
+  depends_on = [kubernetes_namespace.testy_quest_namespace]
+}
+
+
+
+# resource "kubernetes_job" "generate_keyfile" {
+#   metadata {
+#     name      = "generate-keyfile"
+#     namespace = "testy-quest"
+#   }
+  
+#   spec {
+#     template {
+#       metadata{}
+#       spec {
+#         container {
+#           name    = "generate-keyfile-container"
+#           image   = "alpine:latest"  # Using Alpine Linux as the base image
+#           command = ["sh", "-c", "openssl rand -base64 32 > /mnt/keyfile.key"]
+          
+#           volume_mount {
+#             name       = "keyfile-volume"
+#             mount_path = "/mnt"
+#           }
+#         }
+        
+#         volume {
+#           name = "keyfile-volume"
+#           empty_dir {}
+#         }
+        
+#         restart_policy = "Never"
+#       }
+#     }
+#   }
+# }
+
+# Create a Kubernetes Secret to store the keyfile
+# resource "kubernetes_secret" "mongodb-keyfile" {
+#   metadata {
+#     name      = "mongodb-keyfile"
+#     namespace = "testy-quest"
+#   }
+#   data = {
+#     "keyfile" = filebase64("/mnt/keyfile.key")
+#   }
+#   depends_on =[kubernetes_job.generate_keyfile]
+# }
