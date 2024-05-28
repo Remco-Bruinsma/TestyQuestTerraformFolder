@@ -692,6 +692,15 @@ resource "kubernetes_manifest" "question_managerapi_deployment" {
                 {
                   name  = "WATCHPACK_POLLING"
                   value = "true"
+                },
+                {
+                  name  = "MongoDBUsername"
+                  value = "root"
+                },
+                #tests enviroment not real
+                {
+                  name  = "MongoDBPassword"
+                  value = "password123"
                 }
                
               ]

@@ -1,0 +1,107 @@
+name: build and deploy
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+    - name: Restore dependencies
+      run: dotnet restore
+    - name: Build
+      run: dotnet build --no-restore
+    - name: Test
+      run: dotnet test --no-build --verbosity normal
+  
+      
+  Deploy:
+    name: Push Docker image to Docker Hub
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build and push
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          push: true
+          tags: darkghostshade/question-manager-api:latest
+
+  create_k3d_cluster_and_apply_terraform:
+      name: Create k3d Cluster and Apply Terraform
+      runs-on: ubuntu-latest
+      needs: Deploy
+      steps:
+        - name: Install k3d
+          run: |
+            curl -s https://raw.githubusercontent.com/rancher/k3d/main/install.sh | bash
+  
+        - name: Create k3d Cluster
+          run: k3d cluster create testy-quest --api-port 6443 -p "8081:80@loadbalancer" --agents 2
+  
+        - name: Install kubectl
+          run: |
+            curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"
+            chmod +x ./kubectl
+            sudo mv ./kubectl /usr/local/bin/kubectl
+  
+        - name: Configure kubectl
+          run: |
+            k3d kubeconfig get testy-quest > k3d-config
+            mkdir -p $HOME/.kube
+            cp k3d-config $HOME/.kube/config
+            export KUBECONFIG=$HOME/.kube/config
+            
+        - name: Clone Terraform Repository
+          uses: actions/checkout@v2
+          with:
+            repository: Remco-Bruinsma/TestyQuestTerraformFolder
+            ref: main
+            path: terraform
+  
+        - name: Initialize Terraform
+          run: terraform init
+          working-directory: terraform
+
+        - name: Apply Terraform
+          run: terraform apply -auto-approve
+          working-directory: terraform
+
+        - name: Wait for 60 seconds
+          run: sleep 60
+  
+        - name: Retrieve Kubernetes Resources
+          run: kubectl get all -n testy-quest
+
+        - name: Check if question-managerapi-deployment has available pods
+          run: |
+            available_pods=$(kubectl get deployment question-managerapi-deployment -n testy-quest -o=jsonpath='{.status.availableReplicas}')
+            if [[ "$available_pods" -gt "0" ]]; then
+              echo "There are available pods for question-managerapi-deployment."
+              # Proceed with further actions here
+            else
+              echo "Error: There are no available pods for question-managerapi-deployment."
+              exit 1
+            fi
+
