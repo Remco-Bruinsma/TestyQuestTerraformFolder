@@ -1,0 +1,49 @@
+name: build and deploy
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  create_k3d_cluster_and_apply_terraform:
+      name: Create k3d Cluster and Apply Terraform
+      runs-on: ubuntu-latest
+      steps:
+
+      
+        - name: Install k3d
+          run: |
+            curl -s https://raw.githubusercontent.com/rancher/k3d/main/install.sh | bash
+  
+        - name: Create k3d Cluster
+          run: k3d cluster create testy-quest --api-port 6443 -p "8081:80@loadbalancer" --agents 2
+  
+        - name: Install kubectl
+          run: |
+            curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"
+            chmod +x ./kubectl
+            sudo mv ./kubectl /usr/local/bin/kubectl
+                    
+        - name: Configure kubectl
+          run: |
+            k3d kubeconfig get testy-quest > k3d-config
+            mkdir -p $HOME/.kube
+            cp k3d-config $HOME/.kube/config
+            export KUBECONFIG=$HOME/.kube/config
+  
+        - name: Initialize Terraform
+          
+          run: terraform init
+
+        - name: Apply Terraform
+          run: terraform apply -auto-approve
+          
+
+        - name: Wait for 40 seconds
+          run: sleep 40
+  
+        - name: Retrieve Kubernetes Resources
+          run: kubectl get all -n testy-quest
+
